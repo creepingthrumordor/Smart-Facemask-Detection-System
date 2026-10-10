@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Helmet CCTV Dashboard</title>
+    <!-- Using Google Fonts for a clean look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        
+        body {
+            background-color: #2b2b3d; /* Dark theme background matching the image */
+            color: #d1d1e0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- LEFT SIDEBAR (ICONS) --- */
+        .sidebar-left {
+            width: 80px;
+            background-color: #1d1d2c;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            border-right: 1px solid #3a3a52;
+        }
+        
+        .brand-logo { margin-bottom: 40px; color: #6a8dff; font-size: 24px; text-align: center;}
+        
+        .nav-item {
+            width: 100%;
+            padding: 15px 0;
+            text-align: center;
+            cursor: pointer;
+            color: #8b8b9d;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: 0.3s;
+        }
+        .nav-item:hover { color: white; background-color: #252536; }
+        .nav-item.active {
+            color: white;
+            background-color: #2b2b3d;
+            border-left: 4px solid #6a8dff;
+        }
+        
+        .nav-icon { font-size: 20px; display: block; margin-bottom: 5px; }
+
+        .time-box {
+            margin-top: auto;
+            text-align: center;
+            font-size: 10px;
+            color: #8b8b9d;
+        }
+
+        /* --- MIDDLE PANEL (CAMERA LIST) --- */
+        .panel-middle {
+            width: 300px;
+            background-color: #252536;
+            padding: 25px 20px;
+            border-right: 1px solid #3a3a52;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-middle h2 {
+            font-size: 18px;
+            font-weight: 400;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .cam-list-item {
+            background-color: #2b2b3d;
+            padding: 12px 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        
+        .cam-list-item.active {
+            background-color: #313149;
+            border-left: 3px solid #4caf50;
+            color: white;
+        }
+        .cam-list-item:hover { border-color: #4a4a68; }
+
+        /* --- MAIN VIDEO AREA --- */
+        .main-content {
+            flex: 1;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .main-header h2 { font-size: 18px; font-weight: 400; color: white; }
+
+        /* The video player container */
+        .video-container {
+            position: relative;
+            background-color: #111;
+            border-radius: 8px;
+            border: 2px solid #6a8dff; /* Accent border like in image */
+            overflow: hidden;
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0px 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .video-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Makes the video fill the box beautifully */
+        }
+
+        /* Overlays on the video */
+        .video-overlay-top {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            padding: 15px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            color: #aaa;
+            font-size: 13px;
+        }
+        .video-overlay-top span { color: white; display: block; font-size: 15px; margin-bottom: 3px;}
+
+        .video-overlay-bottom {
+            position: absolute;
+            bottom: 20px; left: 20px; right: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .status-badge {
+            background-color: rgba(0, 0, 0, 0.6);
+            color: #ff4757;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-dot {
+            width: 8px; height: 8px;
+            background-color: #ff4757;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        .control-btn {
+            background-color: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            width: 35px; height: 35px;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer;
+        }
+        .control-btn:hover { background-color: rgba(255,255,255,0.2); }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+
+
+    <!-- MIDDLE CAMERA LIST -->
+    <div class="panel-middle">
+        <h2>Watching</h2>
+        
+        <div class="cam-list-item active">
+            <span>1.Smart Helmet Detection System</span>
+            <span>+</span>
+        </div>
+        
+
+    </div>
+
+    <!-- MAIN VIDEO DASHBOARD -->
+    <div class="main-content">
+        <div class="main-header">
+            <h2>1.Smart Helmet Detection System</h2>
+            <div style="color:#888; font-size:14px;">Sort: <b>Name</b> ⌄</div>
+        </div>
+        
+        <!-- Video Player -->
+        <div class="video-container">
+            <!-- The actual video stream generated by Flask -->
+            <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Connecting to ESP32 Stream...">
+            
+            <!-- Top Text Overlay -->
+            <div class="video-overlay-top">
+                <span>Site 01, AI Camera 1</span>
+                YOLOv8 Detection active
+            </div>
+            
+            <!-- Bottom Controls Overlay -->
+            <div class="video-overlay-bottom">
+                <div class="status-badge">
+                    <div class="status-dot"></div> REC
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
