@@ -10,7 +10,7 @@
 // ===========================
 // Enter your WiFi credentials                 
 // ===========================
-const char* ssid = "jason vorhees";
+const char* ssid = "john";
 const char* password = "00000000";
 
 #define PART_BOUNDARY "123456789000000000000987654321"
@@ -37,7 +37,17 @@ static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
+// ===========================
+// Buzzer Alarm Configuration
+// ===========================
+// Connect Buzzer (+) to GPIO 13 (Pin 4 on Left Header: 5V, GND, IO12, IO13)
+// Connect Buzzer (-) to any GND pin
+#define BUZZER_PIN 13
+const bool IS_ACTIVE_BUZZER = false; // set to false for passive buzzers (requires AC frequency oscillation)
+volatile unsigned long buzzer_until = 0;
+
 httpd_handle_t stream_httpd = NULL;
+httpd_handle_t buzzer_httpd = NULL;  // Separate server so buzzer works while streaming
 
 static esp_err_t stream_handler(httpd_req_t *req) {
   camera_fb_t * fb = NULL;
@@ -58,7 +68,8 @@ static esp_err_t stream_handler(httpd_req_t *req) {
       res = ESP_FAIL;
     } else {
       if (fb->format != PIXFORMAT_JPEG) {
-        bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+        // Software compression: quality 40 balances speed and clarity for YOLO detection
+        bool jpeg_converted = frame2jpg(fb, 40, &_jpg_buf, &_jpg_buf_len);
         esp_camera_fb_return(fb);
         fb = NULL;
         if (!jpeg_converted) {
@@ -71,14 +82,14 @@ static esp_err_t stream_handler(httpd_req_t *req) {
       }
     }
     if (res == ESP_OK) {
+      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+    }
+    if (res == ESP_OK) {
       size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
       res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
     }
     if (res == ESP_OK) {
       res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
-    }
-    if (res == ESP_OK) {
-      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
     }
     if (fb) {
       esp_camera_fb_return(fb);
@@ -95,24 +106,57 @@ static esp_err_t stream_handler(httpd_req_t *req) {
   return res;
 }
 
-void startCameraServer() {
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.server_port = 81; // Setting the stream port to 81
+static esp_err_t buzzer_handler(httpd_req_t *req) {
+  // Trigger loud alarm for 4 seconds upon violation detection
+  buzzer_until = millis() + 4000;
+  Serial.println("ALERT! Buzzer alarm triggered by dashboard detection.");
+  const char* resp = "BUZZER_TRIGGERED";
+  httpd_resp_set_type(req, "text/plain");
+  httpd_resp_send(req, resp, strlen(resp));
+  return ESP_OK;
+}
 
-  httpd_uri_t index_uri = {
+void startCameraServer() {
+  // ---- SERVER 1: Video stream on port 81 ----
+  httpd_config_t stream_config = HTTPD_DEFAULT_CONFIG();
+  stream_config.server_port = 81;
+  stream_config.ctrl_port = 32768;
+
+  httpd_uri_t stream_uri = {
     .uri       = "/stream",
     .method    = HTTP_GET,
     .handler   = stream_handler,
     .user_ctx  = NULL
   };
 
-  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
-    httpd_register_uri_handler(stream_httpd, &index_uri);
+  if (httpd_start(&stream_httpd, &stream_config) == ESP_OK) {
+    httpd_register_uri_handler(stream_httpd, &stream_uri);
+    Serial.println("Stream server started on port 81");
+  }
+
+  // ---- SERVER 2: Buzzer commands on port 82 ----
+  // Separate server because stream_handler's while(true) loop
+  // blocks the httpd task, preventing any other request from being served
+  httpd_config_t buzzer_config = HTTPD_DEFAULT_CONFIG();
+  buzzer_config.server_port = 82;
+  buzzer_config.ctrl_port = 32769;  // Must differ from stream server
+
+  httpd_uri_t buzzer_uri = {
+    .uri       = "/buzzer",
+    .method    = HTTP_GET,
+    .handler   = buzzer_handler,
+    .user_ctx  = NULL
+  };
+
+  if (httpd_start(&buzzer_httpd, &buzzer_config) == ESP_OK) {
+    httpd_register_uri_handler(buzzer_httpd, &buzzer_uri);
+    Serial.println("Buzzer server started on port 82");
   }
 }
 
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // Disable brownout detector
+  setCpuFrequencyMhz(240);                    // Maximize ESP32 CPU clock to 240MHz for faster software compression
   
   Serial.begin(115200);
   Serial.setDebugOutput(false);
@@ -137,23 +181,36 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG; 
+  config.pixel_format = PIXFORMAT_RGB565; // Compatible with all camera modules (avoids error 0x106)
+  config.grab_mode = CAMERA_GRAB_LATEST;  // Always drop old frames to ensure instant real-time video
+  config.fb_location = CAMERA_FB_IN_PSRAM;
+  config.jpeg_quality = 12;
+  config.fb_count = 1;
   
-  if(psramFound()){
-    config.frame_size = FRAMESIZE_VGA;
-    config.jpeg_quality = 10;
+  // HVGA (480x320) — half the pixels of VGA, good balance of quality and speed (10-15 FPS)
+  config.frame_size = FRAMESIZE_HVGA;
+  if (psramFound()) {
+    Serial.println(">> PSRAM Found! Using HVGA (480x320) with double buffer");
     config.fb_count = 2;
   } else {
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 12;
+    Serial.println(">> Running on internal DRAM with HVGA");
+    config.fb_location = CAMERA_FB_IN_DRAM;
     config.fb_count = 1;
   }
   
   // Camera init
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.printf("Camera init failed with error 0x%x", err);
+    Serial.printf("Camera init failed with error 0x%x\n", err);
     return;
+  }
+
+  // Tune camera sensor registers for sharp edge contrast (separating hair from helmets)
+  sensor_t *s = esp_camera_sensor_get();
+  if (s) {
+    s->set_contrast(s, 2);    // +2 enhances contrast to separate hair texture from solid helmets
+    s->set_brightness(s, 1);  // +1 prevents dark silhouettes
+    s->set_sharpness(s, 2);   // +2 sharpens hair and helmet boundaries
   }
   
   // Wi-Fi connection
@@ -172,8 +229,34 @@ void setup() {
   
   // Start streaming web server
   startCameraServer();
+
+  // Initialize Buzzer
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  Serial.printf("Buzzer initialized on GPIO %d\n", BUZZER_PIN);
 }
 
+bool buzzer_is_on = false;
+
 void loop() {
-  delay(1);
+  if (millis() < buzzer_until) {
+    if (!buzzer_is_on) {
+      buzzer_is_on = true;
+      if (IS_ACTIVE_BUZZER) {
+        digitalWrite(BUZZER_PIN, HIGH);
+      } else {
+        tone(BUZZER_PIN, 2700); // 2700 Hz: standard loud resonant frequency for buzzers
+      }
+    }
+  } else {
+    if (buzzer_is_on) {
+      buzzer_is_on = false;
+      if (IS_ACTIVE_BUZZER) {
+        digitalWrite(BUZZER_PIN, LOW);
+      } else {
+        noTone(BUZZER_PIN);
+      }
+    }
+  }
+  delay(5);
 }
