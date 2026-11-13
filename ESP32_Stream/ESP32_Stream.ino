@@ -205,12 +205,12 @@ void setup() {
     return;
   }
 
-  // Tune camera sensor registers for sharp edge contrast (separating hair from helmets)
+  // Tune camera sensor registers for sharper image contrast
   sensor_t *s = esp_camera_sensor_get();
   if (s) {
-    s->set_contrast(s, 2);    // +2 enhances contrast to separate hair texture from solid helmets
+    s->set_contrast(s, 2);    // +2 enhances image contrast
     s->set_brightness(s, 1);  // +1 prevents dark silhouettes
-    s->set_sharpness(s, 2);   // +2 sharpens hair and helmet boundaries
+    s->set_sharpness(s, 2);   // +2 sharpens image details
   }
   
   // Wi-Fi connection

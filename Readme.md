@@ -1,107 +1,97 @@
-# 🎭 Smart Face Mask Detection System for ATMs & Restricted Areas
+# Smart Security Surveillance: Real-Time Face Mask Detection for ATMs and Restricted Access
 
-A real-time IoT security surveillance system designed to detect individuals wearing unauthorized face masks in sensitive areas such as ATMs, bank kiosks, and restricted entrances. When a masked individual is detected, the system immediately sounds a physical buzzer alarm on-site, notifies security via Telegram with a photo, and triggers a browser alarm on the web dashboard.
+This project explores an IoT-enabled security system for ATM kiosks, banks, and other restricted entrances where face coverings can conceal a person's identity. An ESP32-CAM sends video to a Python edge-processing application, which uses YOLOv8 and MediaPipe to identify configured face-mask classes and hands covering a face. A detected violation can trigger an ESP32 buzzer, a Telegram photo notification, and an alert on the live Flask dashboard.
 
----
+The project is associated with the **Smart Lanka** thematic track. The abstract lists **Afil Musthafa M** and **Kiruparasa Kavinjan** as authors. Its motivation is to reduce the reliance on continuous manual visual screening with a low-cost wireless camera and automated alerts.
 
-## 🛠️ Tools & Technologies Used
+## Project files
 
-### Hardware
-- **ESP32-CAM Module** (AI-Thinker, OV2640 camera) — Video capture and streaming
-- **Buzzer** (Passive or Active connected to GPIO 13) — On-site audible deterrence
-- **FTDI USB-to-TTL Programmer** — Flashing firmware to ESP32-CAM
-- **5V DC Power Supply / Powerbank** — Powering the ESP32-CAM unit
-- **Breadboard & Jumper Wires** — Hardware wiring
-
-### Software & Libraries
-- **Arduino IDE** (with ESP32 board support) — ESP32 firmware development
-- **Python 3.x** — Backend inference and server engine
-- **Ultralytics YOLOv8** — Deep learning object detection (`face_mask_detector.pt`)
-- **Google MediaPipe Tasks** — Real-time Face & Hand tracking for detecting hands covering the face
-- **OpenCV (`cv2`)** — Frame capture, image processing, and bounding box rendering
-- **Flask** — Web framework serving MJPEG stream and status APIs
-- **Web Audio API & HTML5** — Interactive dark-themed CCTV monitoring dashboard
-- **Telegram Bot API** — Instant mobile photo notifications to security staff
-
----
-
-## ⚙️ How It Works
-
-```
-[ ESP32-CAM ]
-   │
-   ├── Port 81: Streams live MJPEG video (/stream) ──────► [ Python Flask Dashboard ]
-   │                                                               │
-   │                                                      Runs YOLOv8 Detection
-   │                                                      (face_mask_detector.pt)
-   │                                                               │
-   │                                                     Mask Detected? (conf >= 0.65)
-   │                                                               │
-   └── Port 82: Receives instant /buzzer trigger ◄─────────────────┤
-            │                                                      ├──► Telegram Photo Alert
-       Sounds Buzzer                                               └──► Web Dashboard Siren
-```
-
-1. **Dual-Server ESP32 Architecture**:
-   - **Port 81 (`/stream`)**: Serves continuous live video without interruption.
-   - **Port 82 (`/buzzer`)**: Dedicated HTTP server handling alarm requests so the buzzer triggers instantly without getting blocked by the video stream.
-2. **AI Inference (`dashboard.py`)**:
-   - Frames are fetched from `:81/stream` and processed using YOLOv8.
-   - A confidence threshold of **0.65** ensures bare faces are not falsely flagged.
-3. **Immediate Multi-Tier Alerting**:
-   - 🔔 **Physical Alarm**: Dispatches HTTP `GET :82/buzzer` to ring the onboard buzzer for 4 seconds.
-   - 📱 **Telegram Alert**: Uploads a timestamped snapshot of the violator to security personnel.
-   - 🖥️ **Web Dashboard**: Displays the bounding box live, flashes a warning badge, and sounds a rhythmic siren via the browser's Web Audio API.
-
----
-
-## 🔌 Hardware Wiring
-
-| Component | ESP32-CAM Pin |
+| Path | Purpose |
 |---|---|
-| **Buzzer (+)** | **GPIO 13** |
-| **Buzzer (-)** | **GND** |
-| **FTDI TX** | **U0R (GPIO 3)** |
-| **FTDI RX** | **U0T (GPIO 1)** |
-| **FTDI VCC** | **5V** |
-| **FTDI GND** | **GND** |
-| *Flashing only:* **GPIO 0** | **GND** (remove after upload) |
+| `dashboard.py` | Flask server, video capture, YOLO inference, MediaPipe face/hand detection, and alert dispatch |
+| `templates/index.html` | Browser monitoring dashboard |
+| `ESP32_Stream/ESP32_Stream.ino` | ESP32-CAM MJPEG stream and buzzer HTTP server |
+| `face_mask_detector.pt` | YOLO model used for object detection |
+| `blaze_face_short_range.tflite`, `hand_landmarker.task` | MediaPipe face and hand model assets |
 
-> 💡 **Buzzer Type**: The sketch is pre-configured for a **passive buzzer** using `tone(BUZZER_PIN, 2700)`. If using an active buzzer, set `const bool IS_ACTIVE_BUZZER = true;` in `ESP32_Stream.ino`.
+## How it works
 
----
+1. The ESP32-CAM provides an MJPEG stream at `http://<ESP32_IP>:81/stream`.
+2. `dashboard.py` reads the stream and runs YOLO inference (confidence threshold `0.48`, image size `384`). Model classes are assigned a role from their names: mask classes are violations, recognized negative classes such as “without mask” are compliant, and other classes are ignored. If both compliant and violation detections exist, the compliant result suppresses the violation only when its confidence is more than `0.20` higher.
+3. MediaPipe face and hand landmarks are also checked for hands overlapping a face. A hand-covering-face result is treated as a violation.
+4. On a violation, the backend sends a photo to Telegram (10-second cooldown) and requests the ESP32 buzzer (3-second cooldown). The dashboard polls `/alert_status` and can play a browser-generated alarm. Browser audio may require a user interaction first.
 
-## 🚀 Setup & Execution
+The ESP32 runs two HTTP servers because its continuous stream handler occupies the stream server: port `81` serves `/stream`, and port `82` serves `/buzzer`. The buzzer endpoint activates GPIO 13 for four seconds. The sketch defaults to a passive buzzer; set `IS_ACTIVE_BUZZER` to `true` for an active buzzer. The project abstract describes the design as using a high-resolution alert photo and reports evaluation across indoor lighting conditions and camera angles; those evaluation results are claims from the abstract and are not independently reproduced by the application code or this README.
+
+## Requirements
+
+- AI-Thinker ESP32-CAM with OV2640 camera and a compatible Arduino ESP32 core
+- Python and the packages imported by the backend: Flask, OpenCV, MediaPipe, Requests, and Ultralytics
+- A working network connection between the ESP32-CAM and the computer running Flask
+- Telegram bot credentials and a chat ID if Telegram notifications are required
+
+Install the Python packages with:
+
+```bash
+python -m pip install flask opencv-python mediapipe requests ultralytics
+```
+
+The two MediaPipe model files are included. If either is missing, the application attempts to download it at startup. The YOLO model file must be present at `face_mask_detector.pt` in the working directory.
+
+## Configure and run
 
 ### 1. Flash the ESP32-CAM
-1. Open [`ESP32_Stream/ESP32_Stream.ino`](ESP32_Stream/ESP32_Stream.ino) in Arduino IDE.
-2. Update your WiFi credentials:
-   ```cpp
-   const char* ssid = "YOUR_WIFI_SSID";
-   const char* password = "YOUR_WIFI_PASSWORD";
-   ```
-3. Select board **AI Thinker ESP32-CAM**.
-4. Bridge **GPIO 0 to GND**, plug in FTDI programmer, and click **Upload**.
-5. Once uploaded, remove the GPIO 0 jumper, open Serial Monitor at **115200 baud**, and press the **RST** button to get the ESP32 IP address (e.g., `172.20.10.3`).
 
-### 2. Configure & Run Python Backend
-1. Install required packages:
-   ```bash
-   pip install flask opencv-python ultralytics requests mediapipe
-   ```
-2. Verify IP and settings in [`dashboard.py`](dashboard.py):
-   ```python
-   ESP32_STREAM_URL = "http://<YOUR_ESP32_IP>:81/stream"
-   ESP32_BUZZER_URL = "http://<YOUR_ESP32_IP>:82/buzzer"
-   TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-   TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
-   ```
-3. Start the application:
-   ```bash
-   python dashboard.py
-   ```
-4. Open your browser and navigate to:
-   ```
-   http://127.0.0.1:5000
-   ```
-   Click anywhere on the web dashboard to enable audio alarm playback.
+1. Open `ESP32_Stream/ESP32_Stream.ino` in Arduino IDE and enter the Wi-Fi SSID and password in the sketch.
+2. Select the AI Thinker ESP32-CAM board and the appropriate upload settings for your board.
+3. For flashing, connect GPIO 0 to GND, upload the sketch, then remove that connection and reset the board.
+4. Open Serial Monitor at 115200 baud. Note the IP address printed after Wi-Fi connects.
+
+Connect a buzzer positive lead to GPIO 13 and its negative lead to GND. Use a suitable driver circuit if the buzzer draws more current than an ESP32 GPIO can provide. For serial flashing, connect the USB-to-TTL adapter TX to U0R, RX to U0T, 5V to 5V, and GND to GND.
+
+### 2. Configure the Python backend
+
+Set the stream URL using the `VIDEO_SOURCE` environment variable, or edit its default in `dashboard.py`:
+
+```bash
+VIDEO_SOURCE=http://<ESP32_IP>:81/stream python dashboard.py
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:VIDEO_SOURCE = "http://<ESP32_IP>:81/stream"
+python dashboard.py
+```
+
+The buzzer URL and Telegram bot token/chat ID are currently set directly in `dashboard.py`; update them there for your setup. The buzzer endpoint must be `http://<ESP32_IP>:82/buzzer`. Keep bot credentials private and do not commit real credentials to a public repository.
+
+Create the directory used for Telegram alert snapshots before starting the application:
+
+```bash
+mkdir -p alert
+```
+
+Run from the project directory so the relative model and template paths resolve:
+
+```bash
+python dashboard.py
+```
+
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000). The server binds to `0.0.0.0:5000`, so it is also reachable from other devices on the same network using the host computer's IP address.
+
+## Dashboard and routes
+
+- `/` — monitoring dashboard
+- `/video_feed` — annotated MJPEG feed produced by the Python backend
+- `/alert_status` — JSON status used by the dashboard alarm indicator
+- ESP32 `:81/stream` — raw camera MJPEG stream
+- ESP32 `:82/buzzer` — HTTP GET endpoint that activates the physical buzzer
+
+## Troubleshooting
+
+- **No camera feed:** confirm the ESP32 IP and that `http://<ESP32_IP>:81/stream` is reachable from the computer running Flask. Check that both devices are on the same network.
+- **Buzzer does not sound:** check GPIO 13 wiring, buzzer type, and the `IS_ACTIVE_BUZZER` setting; confirm the ESP32 is reachable on port 82.
+- **Telegram photo not sent:** verify the bot token and chat ID in `dashboard.py`, network access, and that the `alert` directory exists and is writable.
+- **Model or template not found:** launch `python dashboard.py` from the project directory and ensure `face_mask_detector.pt` and `templates/index.html` are present.
+- **Dashboard alarm is silent:** click the page once to allow the browser to start audio, and check the audio toggle.

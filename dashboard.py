@@ -42,19 +42,17 @@ for idx, name in model.names.items():
     if any(
         kw in lower_name for kw in ["without", "no-", "no_", "no ", "tidak", "bare"]
     ):
-        if any(
-            item in lower_name for item in ["helmet", "mask", "hardhat", "bermasker"]
-        ):
+        if any(item in lower_name for item in ["mask", "bermasker"]):
             CLASS_ROLE[idx] = "compliant"
         else:
             CLASS_ROLE[idx] = "ignored"
-    elif any(kw in lower_name for kw in ["mask", "bermasker", "helmet", "hardhat"]):
+    elif any(kw in lower_name for kw in ["mask", "bermasker"]):
         CLASS_ROLE[idx] = "violation"
     else:
         CLASS_ROLE[idx] = "ignored"
 
 CONF_THRESHOLD = 0.48  # Tuned threshold so both masks and face coverings are detected reliably
-MODEL_IMGSZ = 384  # Optimized: faster inference, still accurate for masks/helmets
+MODEL_IMGSZ = 384  # Inference image size
 
 # Cooldown for alerts (in seconds)
 ALERT_COOLDOWN = 10
@@ -242,7 +240,7 @@ def _send_telegram_worker(frame_copy, label, conf):
         cv2.imwrite(temp_img_path, frame_copy)
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
 
-        detected_item = label if label else "Face covering / Helmet"
+        detected_item = label if label else "Face covering"
         caption = (
             f"⚠️ SECURITY ALERT: Unauthorized {detected_item} detected!\n"
             f"• Confidence: {conf:.1%}\n"
