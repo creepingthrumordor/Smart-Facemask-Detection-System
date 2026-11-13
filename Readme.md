@@ -17,6 +17,7 @@ A real-time IoT security surveillance system designed to detect individuals wear
 - **Arduino IDE** (with ESP32 board support) — ESP32 firmware development
 - **Python 3.x** — Backend inference and server engine
 - **Ultralytics YOLOv8** — Deep learning object detection (`face_mask_detector.pt`)
+- **Google MediaPipe Tasks** — Real-time Face & Hand tracking for detecting hands covering the face
 - **OpenCV (`cv2`)** — Frame capture, image processing, and bounding box rendering
 - **Flask** — Web framework serving MJPEG stream and status APIs
 - **Web Audio API & HTML5** — Interactive dark-themed CCTV monitoring dashboard
@@ -86,7 +87,7 @@ A real-time IoT security surveillance system designed to detect individuals wear
 ### 2. Configure & Run Python Backend
 1. Install required packages:
    ```bash
-   pip install flask opencv-python ultralytics requests
+   pip install flask opencv-python ultralytics requests mediapipe
    ```
 2. Verify IP and settings in [`dashboard.py`](dashboard.py):
    ```python
