@@ -21,8 +21,8 @@ except ValueError:
 
 ESP32_BUZZER_URL = "http://172.20.10.3:82/buzzer"  # Buzzer runs on separate port (82) to avoid stream blocking
 
-TELEGRAM_BOT_TOKEN = "8933831008:AAGQlWVH0VWQBnw52h8tAdaIJOShPyKxmjI"
-TELEGRAM_CHAT_ID = "8712314502"
+TELEGRAM_BOT_TOKEN = ""
+TELEGRAM_CHAT_ID = ""
 
 MODEL_PATH = "face_mask_detector.pt"
 
@@ -51,7 +51,9 @@ for idx, name in model.names.items():
     else:
         CLASS_ROLE[idx] = "ignored"
 
-CONF_THRESHOLD = 0.48  # Tuned threshold so both masks and face coverings are detected reliably
+CONF_THRESHOLD = (
+    0.48  # Tuned threshold so both masks and face coverings are detected reliably
+)
 MODEL_IMGSZ = 384  # Inference image size
 
 # Cooldown for alerts (in seconds)
@@ -102,11 +104,26 @@ hand_detector = vision.HandLandmarker.create_from_options(
 )
 
 HAND_CONNECTIONS = [
-    (0, 1), (1, 2), (2, 3), (3, 4),  # thumb
-    (0, 5), (5, 6), (6, 7), (7, 8),  # index
-    (5, 9), (9, 10), (10, 11), (11, 12),  # middle
-    (9, 13), (13, 14), (14, 15), (15, 16),  # ring
-    (13, 17), (17, 18), (18, 19), (19, 20),  # pinky
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 4),  # thumb
+    (0, 5),
+    (5, 6),
+    (6, 7),
+    (7, 8),  # index
+    (5, 9),
+    (9, 10),
+    (10, 11),
+    (11, 12),  # middle
+    (9, 13),
+    (13, 14),
+    (14, 15),
+    (15, 16),  # ring
+    (13, 17),
+    (17, 18),
+    (18, 19),
+    (19, 20),  # pinky
     (0, 17),  # palm base
 ]
 
@@ -147,7 +164,9 @@ def detect_hand_covering_face(frame, yolo_face_boxes):
         face_targets.append({"box": (fx1, fy1, fx2, fy2), "nose": nose, "mouth": mouth})
 
     for yb in yolo_face_boxes:
-        face_targets.append({"box": (yb[0], yb[1], yb[2], yb[3]), "nose": None, "mouth": None})
+        face_targets.append(
+            {"box": (yb[0], yb[1], yb[2], yb[3]), "nose": None, "mouth": None}
+        )
 
     hand_boxes = []
     for hand_lms in hand_res.hand_landmarks:
@@ -180,25 +199,28 @@ def detect_hand_covering_face(frame, yolo_face_boxes):
             lower_overlap_ratio = l_inter / max(1, face_w * (fy2 - lower_fy1))
 
             lms_in_lower_face = sum(
-                1 for lm in hand_lms if fx1 <= lm.x * w <= fx2 and lower_fy1 <= lm.y * h <= fy2 + int(face_h * 0.1)
+                1
+                for lm in hand_lms
+                if fx1 <= lm.x * w <= fx2
+                and lower_fy1 <= lm.y * h <= fy2 + int(face_h * 0.1)
             )
 
             mouth_covered = False
             if ft["mouth"]:
                 mx, my = ft["mouth"]
-                mouth_covered = (hx1 <= mx <= hx2 and hy1 <= my <= hy2)
+                mouth_covered = hx1 <= mx <= hx2 and hy1 <= my <= hy2
 
             nose_covered = False
             if ft["nose"]:
                 nx, ny = ft["nose"]
-                nose_covered = (hx1 <= nx <= hx2 and hy1 <= ny <= hy2)
+                nose_covered = hx1 <= nx <= hx2 and hy1 <= ny <= hy2
 
             is_covering = (
-                overlap_ratio >= 0.15 or
-                lower_overlap_ratio >= 0.20 or
-                lms_in_lower_face >= 3 or
-                mouth_covered or
-                nose_covered
+                overlap_ratio >= 0.15
+                or lower_overlap_ratio >= 0.20
+                or lms_in_lower_face >= 3
+                or mouth_covered
+                or nose_covered
             )
 
             if is_covering:
@@ -219,7 +241,13 @@ def detect_hand_covering_face(frame, yolo_face_boxes):
 
                 label = f"Hand Covering Face {max_conf:.2f}"
                 (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-                cv2.rectangle(frame, (hx1, max(0, hy1 - lh - 10)), (hx1 + lw + 10, hy1), (0, 0, 255), -1)
+                cv2.rectangle(
+                    frame,
+                    (hx1, max(0, hy1 - lh - 10)),
+                    (hx1 + lw + 10, hy1),
+                    (0, 0, 255),
+                    -1,
+                )
                 cv2.putText(
                     frame,
                     label,
@@ -290,9 +318,7 @@ def trigger_buzzer_alert():
     if current_time - last_buzzer_time > BUZZER_COOLDOWN:
         last_buzzer_time = current_time
         print(f"Dispatching ESP32 buzzer alert to {ESP32_BUZZER_URL}...")
-        threading.Thread(
-            target=_trigger_buzzer_worker, daemon=True
-        ).start()
+        threading.Thread(target=_trigger_buzzer_worker, daemon=True).start()
 
 
 def send_telegram_alert(frame, label, conf):
@@ -360,7 +386,9 @@ def generate_frames():
             frame = r.plot()
 
         # Check for Hand Covering Face violation
-        hand_covered, hand_conf, hand_label = detect_hand_covering_face(frame, yolo_face_boxes)
+        hand_covered, hand_conf, hand_label = detect_hand_covering_face(
+            frame, yolo_face_boxes
+        )
         if hand_covered:
             violation_count += 1
             if hand_conf > best_violation_conf:
@@ -375,7 +403,9 @@ def generate_frames():
             frame_verdict = "violation"
         elif violation_count > 0:
             # Mask detected: only suppress if no-mask confidence is overwhelmingly higher (+0.20)
-            if compliant_count > 0 and (best_compliant_conf > best_violation_conf + 0.20):
+            if compliant_count > 0 and (
+                best_compliant_conf > best_violation_conf + 0.20
+            ):
                 frame_verdict = "compliant"
             else:
                 frame_verdict = "violation"
@@ -399,7 +429,9 @@ def generate_frames():
                 should_trigger = True
 
         if should_trigger:
-            print(f"[TRIGGER] Violation detected ({best_violation_label} - {best_violation_conf:.2f}) — firing buzzer & alerts")
+            print(
+                f"[TRIGGER] Violation detected ({best_violation_label} - {best_violation_conf:.2f}) — firing buzzer & alerts"
+            )
             send_telegram_alert(frame, best_violation_label, best_violation_conf)
             trigger_buzzer_alert()
             verdict_history.clear()  # Flush history to avoid re-alerting immediately
@@ -436,4 +468,3 @@ if __name__ == "__main__":
     print(f"Active model: {MODEL_PATH}")
     print("Go to http://127.0.0.1:5000 in your browser.")
     app.run(host="0.0.0.0", port=5000, debug=False)
-
